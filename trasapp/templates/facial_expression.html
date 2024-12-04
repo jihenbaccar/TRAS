@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Facial Expression Check</title>
+    <style>
+        #canvas {
+            border: 1px solid black;
+        }
+        #feedback {
+            margin-top: 20px;
+        }
+    </style>
+</head>
+<body>
+    <h1>Facial Expression Check</h1>
+    <p>Choose the emotion you want to make:</p>
+    <select id="emotion-select">
+        <option value="happy">Happy</option>
+        <option value="sad">Sad</option>
+        <option value="angry">Angry</option>
+        <option value="surprised">Surprised</option>
+        <option value="neutral">Neutral</option>
+    </select>
+
+    <p>Look at the camera and click "Capture" when you're ready.</p>
+
+    <video id="video" width="640" height="480" autoplay></video>
+    <canvas id="canvas" width="640" height="480"></canvas>
+    <button id="capture-btn">Capture</button>
+
+    <div id="feedback"></div>
+
+    <script>
+        const video = document.getElementById("video");
+        const canvas = document.getElementById("canvas");
+        const captureBtn = document.getElementById("capture-btn");
+        const feedbackDiv = document.getElementById("feedback");
+        const emotionSelect = document.getElementById("emotion-select");
+
+        let selectedEmotion = emotionSelect.value;  // Get the initially selected emotion
+        emotionSelect.addEventListener('change', function() {
+            selectedEmotion = emotionSelect.value;  // Update the selected emotion
+        });
+
+        // Start the webcam
+        navigator.mediaDevices.getUserMedia({ video: true })
+            .then(stream => {
+                video.srcObject = stream;
+            })
+            .catch(err => {
+                console.error("Error accessing webcam: ", err);
+            });
+
+        // Capture the image when the button is clicked
+        captureBtn.addEventListener("click", () => {
+            const ctx = canvas.getContext("2d");
+            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+            // Get the base64 string of the captured image
+            const imageData = canvas.toDataURL("image/png");
+
+            // Send the image and selected emotion to the server for validation
+            fetch('/check_expression/', {
+                method: 'POST',  // This must be POST
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    required_expression: selectedEmotion,  // the selected emotion
+                    frame: imageData,  // the captured image in base64 format
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                feedbackDiv.innerHTML = data.message;
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                feedbackDiv.innerHTML = "Error: Something went wrong.";
+            });
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ story.title }}</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.14.305/pdf.min.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+        }
+        #pdf-container {
+            text-align: center;
+            margin: 20px;
+        }
+        canvas {
+            border: 1px solid black;
+            width: 80%;
+            max-width: 600px;
+        }
+        button {
+            margin: 10px;
+            padding: 10px 20px;
+            font-size: 16px;
+        }
+        p {
+            font-size: 18px;
+        }
+    </style>
+</head>
+<body>
+    <h1>{{ story.title }}</h1>
+    <div id="pdf-container">
+        <canvas id="pdf-render"></canvas>
+        <div>
+            <button onclick="prevPage()">Previous Page</button>
+            <button onclick="nextPage()">Next Page</button>
+            <p>Page <span id="page-num"></span> of <span id="page-count"></span></p>
+        </div>
+    </div>
+
+    <audio id="audio" controls>
+        <source id="audio-source" />
+    </audio>
+
+    
+
+    <script>
+        const url = "{{ pdf_url }}"; // URL of the PDF
+        const audioFiles = {{audio_files | safe }}; // Dynamically load audio files from the context
+    
+        let pdfDoc = null,
+            pageNum = 1,
+            pageRendering = false,
+            pageNumPending = null;
+    
+        const scale = 1.5;
+        const canvas = document.getElementById('pdf-render');
+        const ctx = canvas.getContext('2d');
+        const audioPlayer = document.getElementById('audio');
+        const audioSource = document.getElementById('audio-source');
+    
+        // Load the PDF document
+        pdfjsLib.getDocument(url).promise.then(pdfDoc_ => {
+            pdfDoc = pdfDoc_;
+            document.getElementById('page-count').textContent = pdfDoc.numPages;
+            renderPage(pageNum);
+        }).catch(error => {
+            console.error('Error loading PDF:', error);
+        });
+    
+        function renderPage(num) {
+            pageRendering = true;
+            pdfDoc.getPage(num).then(page => {
+                const viewport = page.getViewport({ scale });
+                canvas.height = viewport.height;
+                canvas.width = viewport.width;
+    
+                const renderContext = {
+                    canvasContext: ctx,
+                    viewport: viewport
+                };
+                page.render(renderContext).promise.then(() => {
+                    pageRendering = false;
+                    if (pageNumPending !== null) {
+                        renderPage(pageNumPending);
+                        pageNumPending = null;
+                    }
+                });
+                document.getElementById('page-num').textContent = num;
+                loadAudioForPage(num);  // Load audio for the current page
+            }).catch(error => {
+                console.error('Error rendering page:', error);
+            });
+        }
+    
+        function loadAudioForPage(pageNum) {
+            const audioFile = audioFiles[pageNum - 1]; // Dynamically fetch the audio file for the page
+            if (audioFile) {
+                const audioUrl = "/media/stories/audio/" + audioFile;
+                console.log('Loading audio for page ' + pageNum + ': ' + audioUrl);
+                
+                // Load and play the audio after user interaction
+                audioSource.src = audioUrl;
+                audioPlayer.load();
+                audioPlayer.play().catch(error => {
+                    console.error('Error playing audio:', error);
+                });
+            } else {
+                console.warn('No audio file found for page ' + pageNum);
+            }
+        }
+    
+        function nextPage() {
+            if (pageRendering || pageNum >= pdfDoc.numPages) return;
+            pageNum++;
+            renderPage(pageNum);
+        }
+    
+        function prevPage() {
+            if (pageRendering || pageNum <= 1) return;
+            pageNum--;
+            renderPage(pageNum);
+        }
+    </script>
+    
+</body>
+</html>
