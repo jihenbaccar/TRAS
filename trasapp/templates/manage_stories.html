@@ -1,0 +1,329 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Story Management</title>
+    <style>
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+        th, td {
+            border: 1px solid black;
+            padding: 10px;
+            text-align: center;
+        }
+        .form-section {
+            margin: 20px 0;
+        }
+        input, textarea {
+            width: 100%;
+            margin: 5px 0;
+        }
+        button {
+            margin: 5px;
+        }
+    </style>
+</head>
+<body>
+    <h1>Story Management</h1>
+
+    <!-- Add Button -->
+    <div>
+        <button onclick="openAddStoryForm()">Add New Story</button>
+    </div>
+
+    <!-- Story Form -->
+    <div id="story-form-container" style="display:none;">
+        <h2>Add/Edit Story</h2>
+        <form id="story-form">
+            <input type="hidden" id="story-id" name="story_id">
+            <label for="name">Name:</label>
+            <input type="text" id="name" name="name" required><br>
+            <label for="pdf">PDF:</label>
+            <input type="file" id="pdf" name="pdf" accept=".pdf"><br>
+            <div id="current-pdf-container" style="margin-top: 5px;"></div>
+            <div id="questions-container" class="form-section">
+                <h3>Quiz Questions</h3>
+                <button type="button" onclick="addQuestion()">Add Question</button>
+                <div id="questions-list"></div>
+            </div>
+            <button type="submit">Save</button>
+            <button type="button" onclick="closeStoryForm()">Cancel</button>
+        </form>
+    </div>
+
+    <!-- Story Table -->
+    <table>
+        <thead>
+            <tr>
+                <th>Title</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody id="story-table">
+            {% for story in stories %}
+            <tr id="story-row-{{ story.id }}">
+                <td>{{ story.title }}</td>
+                <td>
+                    <button onclick="editStory({{ story.id }}, '{{ story.title }}', '{{ story.questions|escapejs }}',  '{{ story.pdf }}')">Edit</button>
+                    <button onclick="deleteStory({{ story.id }})">Delete</button>
+                </td>
+            </tr>
+            {% empty %}
+            <tr>
+                <td colspan="2">No stories available.</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+        
+    </table>
+    {% csrf_token %}
+
+    <script>
+        // CSRF token utility
+        function getCsrfToken() {
+            const cookieValue = document.cookie.match(/csrftoken=([^;]+)/);
+            return cookieValue ? cookieValue[1] : null;
+        }
+        const csrfToken = getCsrfToken();
+
+        // DOM elements
+        const storyFormContainer = document.getElementById('story-form-container');
+        const storyForm = document.getElementById('story-form');
+        const storyTable = document.getElementById('story-table');
+
+        // Open Add Story form
+        function openAddStoryForm() {
+            storyForm.reset();
+            document.getElementById('story-id').value = '';
+            document.getElementById('questions-list').innerHTML = '';
+            const pdfContainer = document.getElementById('current-pdf-container');
+            pdfContainer.innerHTML = '';
+            storyFormContainer.style.display = 'block';
+        }
+
+        // Close form
+        function closeStoryForm() {
+            storyFormContainer.style.display = 'none';
+        }
+
+    
+ // Add a question
+function addQuestion(questionData = {}) {
+    const questionIndex = document.querySelectorAll('.question-item').length;
+    const questionId = `question-${questionIndex}`;
+    const questionHtml = `
+        <div id="${questionId}" class="question-item">
+            <label>Question:</label>
+            <input type="text" name="question-text" value="${questionData.question || ''}" required>
+            <div class="answers">
+                ${(questionData.options || []).map((option, i) => {
+                    const hasAlphabetPrefix = /^[A-Z]\. /.test(option);
+                    const letter = String.fromCharCode(65 + i);  // Get alphabet letter (A, B, C, etc.)
+
+     
+                    return `
+                        <div class="answer-item">
+                            <label>Option ${letter}:</label>
+                            <input type="text" name="option-text" value="${option}" required>
+                            <button type="button" onclick="removeAnswer(this)">Remove</button>
+                        </div>
+                    `;
+                }).join('')}
+            </div>
+            <button type="button" onclick="addAnswer('${questionId}')">Add Option</button>
+            <label>Correct Answer:</label>
+            <select name="correct-answer">
+                ${(questionData.options || []).map((option, i) => {
+                    const letter = String.fromCharCode(65 + i);  // Get alphabet letter (A, B, C, etc.)
+                    return `
+                        <option value="${letter}" ${letter === questionData.correct_answer ? 'selected' : ''}>
+                            Option ${letter}
+                        </option>
+                    `;
+                }).join('')}
+            </select>
+            <button type="button" onclick="removeQuestion('${questionId}')">Remove Question</button>
+        </div>
+    `;
+    document.getElementById('questions-list').insertAdjacentHTML('beforeend', questionHtml);
+    updateCorrectAnswerOptions(questionId);
+}
+
+// Add an option to a question
+function addAnswer(questionId) {
+    const questionDiv = document.getElementById(questionId).querySelector('.answers');
+    const answerIndex = questionDiv.querySelectorAll('.answer-item').length;
+    const answerLetter = String.fromCharCode(65 + answerIndex);  // Dynamically create the letter (A, B, C, etc.)
+    const answerHtml = `
+        <div class="answer-item">
+            <label>Option ${answerLetter}:</label>
+            <input type="text" name="option-text" required>
+            <button type="button" onclick="removeAnswer(this)">Remove</button>
+        </div>
+    `;
+    questionDiv.insertAdjacentHTML('beforeend', answerHtml);
+    updateCorrectAnswerOptions(questionId);
+}
+
+// Update correct answer dropdown based on current options
+function updateCorrectAnswerOptions(questionId) {
+    const questionDiv = document.getElementById(questionId);
+    const options = Array.from(questionDiv.querySelectorAll('.answers input')).map((input, index) => {
+        const letter = String.fromCharCode(65 + index); // Get alphabet letter (A, B, C, etc.)
+        return `${letter}. ${input.value}`; // Concatenate letter with the value of the option
+    });
+    const correctAnswerSelect = questionDiv.querySelector('select[name="correct-answer"]');
+    
+    correctAnswerSelect.innerHTML = options.map((option, i) => {
+        const letter = String.fromCharCode(65 + i); // Get alphabet letter (A, B, C, etc.)
+        return `<option value="${letter}">Option ${letter}</option>`; // Use the letter for correct answer selection
+    }).join('');
+}
+
+// Remove an option
+function removeAnswer(button) {
+    const questionDiv = button.closest('.question-item');
+    button.parentElement.remove();
+    updateCorrectAnswerOptions(questionDiv.id);
+}
+
+// Remove a question
+function removeQuestion(questionId) {
+    document.getElementById(questionId).remove();
+}
+
+// Form Submission: Collect quiz data in the required JSON format
+storyForm.addEventListener('submit', (e) => {
+    e.preventDefault();
+    const formData = new FormData(storyForm);
+    const questions = [];
+    document.querySelectorAll('.question-item').forEach((item) => {
+        const questionText = item.querySelector('input[name="question-text"]').value;
+        const options = Array.from(item.querySelectorAll('.answers input')).map((input, index) => {
+            const letter = String.fromCharCode(65 + index);  // Get alphabet letter (A, B, C, etc.)
+            let optionText = input.value;
+
+            // Regex to check if the option already starts with a letter and a dot (e.g., A. )
+            const hasAlphabetPrefix = /^[A-Z]\. /.test(optionText);
+
+            // Only prepend the letter if it doesn't already have the prefix
+            if (optionText && !hasAlphabetPrefix) {
+                optionText = `${letter}. ${optionText}`;
+            }
+
+            return optionText;  // Return the modified option
+        });
+        const correctAnswer = item.querySelector('select[name="correct-answer"]').value;
+        questions.push({ question: questionText, options, correct_answer: correctAnswer });
+    });
+    formData.set('quiz_questions', JSON.stringify(questions));
+    const storyId = formData.get('story_id');
+    const url = storyId ? `/update-story/${storyId}/` : '/add-story/';
+
+    fetch(url, {
+        method: 'POST',
+        body: formData,
+        headers: { 'X-CSRFToken': csrfToken },
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.status === 'success') {
+            closeStoryForm();
+        } else {
+            alert(`Error: ${data.message}`);
+        }
+    });
+
+    
+});
+
+function editStory(id, name, quizQuestions, pdfUrl) {
+    const mediaUrl = '/media/';
+    if (!pdfUrl.startsWith(mediaUrl)) {
+        pdfUrl = mediaUrl + pdfUrl;
+    }
+
+    // Populate form fields
+    document.getElementById('story-id').value = id;
+    document.getElementById('name').value = name;
+
+    // Manage the current PDF display
+    const pdfContainer = document.getElementById('current-pdf-container');
+    pdfContainer.innerHTML = '';
+
+    if (pdfUrl) {
+        const link = document.createElement('a');
+        link.href = pdfUrl;
+        link.target = '_blank';
+        link.textContent = 'Click to view current PDF';
+        link.style.display = 'block';
+        link.style.marginBottom = '5px';
+
+        pdfContainer.appendChild(link);
+    }
+
+    // Parse quizQuestions
+    let parsedQuizQuestions = [];
+    try {
+        if (typeof quizQuestions === 'string') {
+            // Convert single quotes to double quotes for valid JSON
+            const formattedQuizQuestions = quizQuestions.replace(/'/g, '"');
+            parsedQuizQuestions = JSON.parse(formattedQuizQuestions);
+        } else {
+            parsedQuizQuestions = Array.isArray(quizQuestions) 
+                ? quizQuestions 
+                : JSON.parse(quizQuestions);
+        }
+    } catch (error) {
+        console.error('Error parsing quizQuestions:', error);
+        return; // Stop execution if parsing fails
+    }
+
+    // Populate the quiz questions and options
+    const questionsList = document.getElementById('questions-list');
+    questionsList.innerHTML = ''; // Clear existing questions
+
+    parsedQuizQuestions.forEach((questionData) => {
+        addQuestion(questionData);
+    });
+
+    // Show the form
+    storyFormContainer.style.display = 'block';
+}
+
+
+// Delete Story
+function deleteStory(id) {
+    if (confirm('Are you sure you want to delete this story?')) {
+        fetch(`/delete-story/${id}/`, {
+            method: 'DELETE',
+            headers: {
+                'X-CSRFToken': csrfToken,
+            },
+        })
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error('Server error occurred');
+                }
+                return response.json();
+            })
+            .then(data => {
+                if (data.status === 'success') {
+                    document.getElementById(`story-row-${id}`).remove();
+                } else {
+                    alert(`Error: ${data.message}`);
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('An unexpected error occurred. Please try again.');
+            });
+    }
+}
+    </script>
+</body>
+</html>

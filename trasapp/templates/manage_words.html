@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Manage Words</title>
+    <style>
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        th, td {
+            border: 1px solid #ddd;
+            padding: 8px;
+        }
+
+        th {
+            background-color: #f4f4f4;
+        }
+
+        .form-control {
+            margin: 10px 0;
+        }
+
+        .form-control input, select {
+            padding: 8px;
+            width: calc(100% - 20px);
+        }
+
+        button {
+            padding: 8px 12px;
+            margin-top: 10px;
+        }
+        
+    </style>
+</head>
+<body>
+    <h1>Manage Words</h1>
+    <!--
+    <div class="form-control">
+        <input type="text" id="word" placeholder="Enter Word">
+        <input type="file" id="image" name="image" accept="image/*" >
+        <select id="difficulty">
+            <option value="Easy">Easy</option>
+            <option value="Medium">Medium</option>
+            <option value="Difficult">Difficult</option>
+        </select>
+
+        <div id="currentImageContainer" style="display:none;">
+            <p>Current Image:</p>
+            <!--
+            <img id="currentImage" src="" alt="Current Word Image">
+        -->
+ <!--          <a href="" id="viewImageLink" target="_blank">View full-size image</a>
+        </div>
+
+        <button onclick="submitWord()">Save Word</button>
+    </div>
+-->
+
+<div class="form-control" id="wordForm" style="display:none;">
+    <input type="text" id="word" placeholder="Enter Word">
+    <input type="file" id="image" name="image" accept="image/*">
+    <select id="difficulty">
+        <option value="Easy">Easy</option>
+        <option value="Medium">Medium</option>
+        <option value="Difficult">Difficult</option>
+    </select>
+
+    <div id="currentImageContainer" style="display:none;">
+        <p>Current Image:</p>
+        <a href="" id="viewImageLink" target="_blank">View full-size image</a>
+    </div>
+
+    <button onclick="submitWord()">Save Word</button>
+</div>
+
+<button onclick="showAddForm()">+</button>
+<br> <br>
+
+
+
+    <table id="wordsTable">
+        <thead>
+            <tr>
+                <th>ID</th>
+                <th>Word</th>
+                <th>Image</th>
+                <th>Difficulty</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            <!-- Words will be dynamically loaded here -->
+        </tbody>
+    </table>
+
+    <script>
+        let currentWordId = null;  // Add this variable to store the current word ID when editing
+
+        const showAddForm = () => {
+    currentWordId = null; // Reset for adding a new word
+    document.getElementById('word').value = ''; // Clear fields
+    document.getElementById('image').value = '';
+    document.getElementById('difficulty').value = 'Easy'; // Default difficulty
+    document.getElementById('currentImageContainer').style.display = 'none'; // Hide current image section
+    document.getElementById('wordForm').style.display = 'block'; // Show the form
+};
+
+       
+
+        const loadWords = () => {
+            fetch('/words/')
+                .then(response => response.json())
+                .then(data => {
+                    const tableBody = document.querySelector('#wordsTable tbody');
+                    tableBody.innerHTML = ''; // Clear existing rows
+
+                    data.forEach(word => {
+                        const row = `
+                            <tr>
+                                <td>${word.id}</td>
+                                <td>${word.word}</td>
+                                <td><img src="${word.image}" alt="${word.word}" width="50"></td>
+                                <td>${word.difficulty}</td>
+                                <td>
+                                    <button onclick="editWord(${word.id}, '${word.word}', '${word.image}', '${word.difficulty}')">Edit</button>
+                                    <button onclick="deleteWord(${word.id})">Delete</button>
+                                </td>
+                            </tr>
+                        `;
+                        tableBody.insertAdjacentHTML('beforeend', row);
+                    });
+                });
+        };
+
+        const submitWord = () => {
+    const word = document.getElementById('word').value;
+    const image = document.getElementById('image').files[0];  // Get the file from the input
+    const difficulty = document.getElementById('difficulty').value;
+
+    if (!word || !difficulty) {
+        alert('Please fill out all fields!');
+        return;
+    }
+
+    const formData = new FormData();
+    formData.append('word', word);
+    formData.append('image', image);  // Only append the image if it's there
+    formData.append('difficulty', difficulty);
+
+    const url = currentWordId ? `/words/edit/${currentWordId}/` : '/words/add/';
+    
+    fetch(url, {
+        method: 'POST',  // Use POST for both add and edit
+        body: formData,
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.status === 'success') {
+            loadWords();  // Reload the word list
+            resetForm();  // Reset the form fields
+        } else {
+            alert('Error: ' + data.message);
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+    });
+};
+
+        const editWord = (id, word, image, difficulty) => {
+            currentWordId = id;  // Set the ID of the word being edited
+            document.getElementById('word').value = word;
+            document.getElementById('difficulty').value = difficulty;
+
+            const currentImageUrl = image ? `${image}` : ''; // Adjust if necessary
+        //    document.getElementById('currentImage').src = currentImageUrl;
+            document.getElementById('viewImageLink').href = currentImageUrl;
+            document.getElementById('currentImageContainer').style.display = 'block';
+
+            document.querySelector('button').textContent = 'Update Word';  // Change button text
+            document.getElementById('wordForm').style.display = 'block';
+        };
+
+        const resetForm = () => {
+            document.getElementById('word').value = '';
+            document.getElementById('difficulty').value = 'Easy';  // Reset difficulty
+            document.getElementById('image').value = '';  // Reset file input
+            document.getElementById('currentImageContainer').style.display = 'none';
+            document.querySelector('button').textContent = 'Save Word';  // Reset button text
+            currentWordId = null;  // Reset the currentWordId to null
+        };
+
+        const deleteWord = (id) => {
+            if (confirm('Are you sure you want to delete this word?')) {
+                fetch(`/words/delete/${id}/`, {
+                    method: 'DELETE',
+                })
+                .then(() => loadWords())
+                .catch((error) => console.error('Error:', error)); // Added error handling
+            }
+        };
+
+
+        document.addEventListener('DOMContentLoaded', loadWords);
+    </script>
+</body>
+</html>

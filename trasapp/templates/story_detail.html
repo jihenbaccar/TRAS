@@ -26,6 +26,20 @@
         p {
             font-size: 18px;
         }
+        .answer-button {
+            padding: 10px;
+            font-size: 16px;
+            margin: 5px;
+            cursor: pointer;
+            background-color: #f1f1f1;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+        }
+
+        .answer-button:hover {
+            background-color: #e1e1e1;
+        }
+
     </style>
 </head>
 <body>
@@ -43,12 +57,19 @@
         <source id="audio-source" />
     </audio>
 
-    
+
+     <!-- Quiz Section -->
+     <div id="quiz-container" style="display:none;">
+        <h2>Quiz</h2>
+        <div id="questions"></div>
+    </div>
+
 
     <script>
         const url = "{{ pdf_url }}"; // URL of the PDF
         const audioFiles = {{audio_files | safe }}; // Dynamically load audio files from the context
-    
+        const quizQuestions = {{ questions | safe }}; // Get the quiz questions from the context
+
         let pdfDoc = null,
             pageNum = 1,
             pageRendering = false,
@@ -89,6 +110,11 @@
                 });
                 document.getElementById('page-num').textContent = num;
                 loadAudioForPage(num);  // Load audio for the current page
+
+                if (num === pdfDoc.numPages) {
+                    document.getElementById('quiz-container').style.display = 'block';
+                    loadQuiz();
+                }
             }).catch(error => {
                 console.error('Error rendering page:', error);
             });
@@ -122,6 +148,73 @@
             pageNum--;
             renderPage(pageNum);
         }
+
+
+        function loadQuiz() {
+            const questionsDiv = document.getElementById('questions');
+            quizQuestions.forEach((q, index) => {
+                const questionDiv = document.createElement('div');
+                questionDiv.className = 'question';
+                questionDiv.innerHTML = `<p>${index + 1}. ${q.question}</p>`;
+                const optionsDiv = document.createElement('div');
+                optionsDiv.className = 'options';
+
+                q.options.forEach(option => {
+                    const button = document.createElement('button');
+                    button.textContent = option;
+                    button.onclick = () => checkAnswer(index, option); // Check the answer directly
+                    optionsDiv.appendChild(button);
+                });
+
+                questionDiv.appendChild(optionsDiv);
+                questionsDiv.appendChild(questionDiv);
+            });
+        }
+
+
+        function checkAnswer(questionIndex, selectedAnswer) {
+  const question = quizQuestions[questionIndex];
+  const correctAnswer = question.correct_answer;
+
+  let message = '';  // This will hold the message for speech synthesis
+
+
+  // Find all buttons for this question
+  const buttons = document.querySelectorAll(`#questions .question:nth-child(${questionIndex + 1}) .options button`);
+
+  buttons.forEach(button => {
+    const buttonText = button.textContent.trim().charAt(0);
+
+    // If the current button is the selected one
+    if (button.textContent === selectedAnswer) {
+      if (buttonText !== correctAnswer) {
+        button.style.backgroundColor = 'red'; // Wrong answer
+        message = 'Wrong answer!';  // Set the message for wrong answer
+
+      } else {
+        button.style.backgroundColor = 'green'; // Correct answer
+        message = 'Good Job! Correct answer.';  // Set the message for correct answer
+
+      }
+    } else if (buttonText === correctAnswer) {
+      button.style.backgroundColor = 'green'; // Correct answer (not selected)
+
+    }
+
+    button.disabled = true;
+     // Cancel any ongoing speech to prevent repetition
+     speechSynthesis.cancel();
+
+    // Use the Web Speech API to say the message in English
+    const speech = new SpeechSynthesisUtterance(message);
+    speech.lang = 'en-US';  // Set language to English
+    speechSynthesis.speak(speech);
+
+  });
+}
+
+
+
     </script>
     
 </body>

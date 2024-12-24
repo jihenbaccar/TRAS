@@ -172,25 +172,6 @@ def assess_pronunciation(request):
 
 
 
-
-"""
-def pronunciation_view(request):
-    word = "Cat"  # Example word
-    image_name = "cat.jpg"  # Example image file name
-
-    # Construct the full path for the image
-    image_path = os.path.join(settings.MEDIA_ROOT, 'images', image_name)
-
-    # Check if the image exists
-    if os.path.exists(image_path):
-        image_url = f"/media/images/{image_name}"
-    else:
-        image_url = "/media/images/default.jpg"  # Fallback image if not found
-
-    return render(request, 'pronunciation.html', {'word': word, 'image_url': image_url})
-
-"""
-
 def pronunciation_view(request):
     # Fetch a random word from the database
     word = Word.objects.order_by('?').first()  # Random word
@@ -209,67 +190,7 @@ def pronunciation_view(request):
 
 
 #  STORY READING CODE
-'''
-import fitz  # PyMuPDF
 
-def extract_text_from_pdf(pdf_path):
-    document = fitz.open(pdf_path)
-    pages_text = []
-    for page_num in range(len(document)):
-        page = document.load_page(page_num)
-        text = page.get_text("text")
-        pages_text.append(text)
-    return pages_text
-
-from gtts import gTTS
-import os
-
-def generate_audio(text, filename="output.mp3"):
-    tts = gTTS(text, lang='en')
-    tts.save(filename)
-    return filename
-
-
-def generate_audio_for_story(pdf_path):
-    pages_text = extract_text_from_pdf(pdf_path)
-    audio_files = []
-    for i, text in enumerate(pages_text):
-        audio_filename = f"story_page_{i+1}.mp3"
-        generate_audio(text, audio_filename)
-        audio_files.append(audio_filename)
-    return audio_files
-
-
-
-from django.http import HttpResponse
-from django.conf import settings
-import os
-
-def serve_audio(request, filename):
-    audio_file_path = os.path.join(settings.MEDIA_ROOT, 'stories', filename)
-    if os.path.exists(audio_file_path):
-        with open(audio_file_path, 'rb') as f:
-            response = HttpResponse(f.read(), content_type="audio/mpeg")
-            response['Content-Disposition'] = f'inline; filename={filename}'
-            return response
-    return HttpResponse(status=404)
-
-
-from django.shortcuts import render
-
-def story_detail(request, story_id):
-    story = get_object_or_404(Story, id=story_id)
-    return render(request, 'story_detail.html', {
-        'story': story,
-    })
-
-def story_view(request):
-    story = get_object_or_404(Story, pk=story_id)  # Assuming you retrieve the story from the database
-    return render(request, 'story_detail.html', {'story': story})
-
-
-    
-    '''
 
 import os
 from django.shortcuts import render, get_object_or_404
@@ -283,61 +204,46 @@ import pytesseract
 import io
 
 
-'''
+
+import os
+from django.shortcuts import render, get_object_or_404
+from django.conf import settings
+from django.http import HttpResponse
+from gtts import gTTS
+import fitz  # PyMuPDF
+from .models import Story
+
+# Extract text from a PDF where the text is selectable
 def extract_text_from_pdf(pdf_path):
     document = fitz.open(pdf_path)
-    return [page.get_text("text") for page in document]
-    '''
-
-'''
-def extract_text_from_pdf(pdf_path):
-    document = fitz.open(pdf_path)
-    pages_text = []
-    
-    pytesseract.pytesseract.tesseract_cmd = r'C:\Program Files\Tesseract-OCR\tesseract.exe'
-
-    for page_num in range(len(document)):
-        page = document.load_page(page_num)
-        
-        # Extract the page as an image
-        pix = page.get_pixmap()  # Create a pixmap (image) of the page
-        img = Image.open(io.BytesIO(pix.tobytes()))  # Open the image with Pillow
-
-        # Use pytesseract to perform OCR on the image and extract text
-        text = pytesseract.image_to_string(img)
-
-        if not text.strip():  # Handle empty text
-            print(f"No text found on page {page_num}")
-        else:
-            pages_text.append(text)  # Only append non-empty text
-    
+    pages_text = [page.get_text("text").strip() for page in document if page.get_text("text").strip()]
+    document.close()
     return pages_text
-'''
 
+# Generate audio files for each page of the story
 def generate_audio_for_story(story):
     audio_files = []
     pages_text = extract_text_from_pdf(story.pdf.path)
     for i, text in enumerate(pages_text):
-        audio_filename = f"story_{story.id}_page_{i+1}.mp3"
-        audio_path = os.path.join('media/stories/audio', audio_filename)
+        audio_filename = f"story_{story.id}_page_{i + 1}.mp3"
+        audio_path = os.path.join(settings.MEDIA_ROOT, 'stories', 'audio', audio_filename)
         tts = gTTS(text, lang='en')
         tts.save(audio_path)
         audio_files.append(audio_filename)
     story.audio_files = audio_files
     story.save()
 
-'''
-def story_detail(request, story_id):
-    # Fetch the story object
-    story = get_object_or_404(Story, pk=story_id)
+# Serve audio files
+def serve_audio(request, filename):
+    audio_file_path = os.path.join(settings.MEDIA_ROOT, 'stories', filename)
+    if os.path.exists(audio_file_path):
+        with open(audio_file_path, 'rb') as f:
+            response = HttpResponse(f.read(), content_type="audio/mpeg")
+            response['Content-Disposition'] = f'inline; filename={filename}'
+            return response
+    return HttpResponse(status=404)
 
-    # Construct the full URL for the PDF
-    pdf_url = settings.MEDIA_URL + str(story.pdf)
-
-    # Render the HTML template with the story data and PDF URL
-    return render(request, 'story_detail.html', {'story': story, 'pdf_url': pdf_url})
-'''
-
+# Story detail view
 def story_detail(request, story_id):
     # Fetch the story object
     story = get_object_or_404(Story, pk=story_id)
@@ -349,11 +255,10 @@ def story_detail(request, story_id):
     # Construct the full URL for the PDF
     pdf_url = settings.MEDIA_URL + str(story.pdf)
     audio_files = story.audio_files  # Get the audio files from the database
+    questions = story.questions  # Get the quiz questions from the database
 
     # Render the HTML template with the story data and PDF URL
-    return render(request, 'story_detail.html', {'story': story, 'pdf_url': pdf_url, 'audio_files': audio_files})
-
-
+    return render(request, 'story_detail.html', {'story': story, 'pdf_url': pdf_url, 'audio_files': audio_files, 'questions': questions})
 
 
 
@@ -362,72 +267,269 @@ def check_answer(request, story_id):
     question_index = int(request.GET.get('question_index'))
     user_answer = request.GET.get('answer')
     correct_answer = story.questions[question_index]["correct_answer"]
-    return JsonResponse({'result': user_answer == correct_answer})
+
+    response_data = {
+        'result': user_answer == correct_answer,
+        'correct_answer': correct_answer if user_answer != correct_answer else None,
+    }
+    return JsonResponse(response_data)
 
 
 
-from django.http import HttpResponse
-from django.conf import settings
-import os
-import re
+#STORY Management
+from django.http import JsonResponse
+from django.views.decorators.csrf import ensure_csrf_cookie
+
+@ensure_csrf_cookie
+def manage_stories(request):
+    stories = Story.objects.all()
+    return render(request, 'manage_stories.html', {'stories': stories})
+
+def add_story(request):
+    if request.method == 'POST':
+        title = request.POST.get('name')
+        pdf = request.FILES.get('pdf')
+        quiz_questions = request.POST.get('quiz_questions')
+
+        try:
+            quiz_questions = json.loads(quiz_questions) if quiz_questions else []
+        except json.JSONDecodeError:
+            return JsonResponse({'status': 'error', 'message': 'Invalid JSON for quiz questions.'})
+
+        if not title or not pdf:
+            return JsonResponse({'status': 'error', 'message': 'Missing title or PDF file.'})
+
+        story = Story.objects.create(title=title, pdf=pdf, questions=quiz_questions)
+        return JsonResponse({'status': 'success', 'story': {'id': story.id, 'name': story.title}})
+    return JsonResponse({'status': 'error', 'message': 'Invalid request method.'})
 
 
-def serve_audio(request, filename):
-    audio_file_path = os.path.join(settings.MEDIA_ROOT, 'stories', filename)
-    if os.path.exists(audio_file_path):
-        with open(audio_file_path, 'rb') as f:
-            response = HttpResponse(f.read(), content_type="audio/mpeg")
-            response['Content-Disposition'] = f'inline; filename={filename}'
-            return response
+def update_story(request, story_id):
+    story = get_object_or_404(Story, id=story_id)
+
+    if request.method == 'POST':
+        title = request.POST.get('name')
+        pdf = request.FILES.get('pdf')
+        quiz_questions = request.POST.get('quiz_questions')
+
+        # Handle quiz questions (if any)
+        try:
+            quiz_questions = json.loads(quiz_questions) if quiz_questions else []
+        except json.JSONDecodeError:
+            return JsonResponse({'status': 'error', 'message': 'Invalid JSON for quiz questions.'})
+
+        # Update the story's title
+        if title:
+            story.title = title
+        
+        # If a new PDF is uploaded, process it
+        if pdf:
+            # Clear old audio files before saving the new PDF
+            audio_folder = os.path.join(settings.MEDIA_ROOT, 'stories', 'audio')
+            for filename in os.listdir(audio_folder):
+                if filename.startswith(f"story_{story.id}_") and filename.endswith(".mp3"):
+                    file_path = os.path.join(audio_folder, filename)
+                    os.remove(file_path)
+
+            # Save the new PDF and clear old audio files
+            story.pdf = pdf
+            story.audio_files= [] # Clear old audio files before generating new ones
+
+        # Update quiz questions
+        story.questions = quiz_questions
+        story.save()  # Save the updated story
+
+        return JsonResponse({'status': 'success', 'story': {'id': story.id, 'name': story.title}})
+
+    return JsonResponse({'status': 'error', 'message': 'Invalid request method.'})
+
+def delete_story(request, story_id):
+    try:
+        # Get the story by ID
+        story = get_object_or_404(Story, id=story_id)
+
+        # Define the path to the audio folder
+        audio_folder = os.path.join(settings.MEDIA_ROOT, 'stories', 'audio')
+
+        # Delete audio files related to the story
+        deleted_files = []
+        for filename in os.listdir(audio_folder):
+            if filename.startswith(f"story_{story.id}_") and filename.endswith(".mp3"):
+                file_path = os.path.join(audio_folder, filename)
+                try:
+                    os.remove(file_path)
+                    deleted_files.append(file_path)
+                except Exception as e:
+                    continue  # Ignore errors in deleting individual files
+
+        # Delete the story itself
+        story.delete()
+
+        return JsonResponse({'status': 'success', 'message': 'Story and associated audios deleted successfully.'})
+
+    except Exception as e:
+        return JsonResponse({'status': 'error', 'message': 'An error occurred while deleting the story'}, status=500)
+    
+
+
+# MANAGE WORDS
+
+from django.views.decorators.csrf import csrf_exempt
+from django.core.files.storage import FileSystemStorage
+
+def manage_words(request):
+    return render(request, 'manage_words.html')
+
+
+@csrf_exempt
+def get_words(request):
+    """Fetch all words."""
+    if request.method == 'GET':
+        words = Word.objects.all()
+        word_list = [
+            {
+                "id": word.id,
+                "word": word.word,
+                "image": word.image.url if word.image else "",  # Serialize the image URL
+                "difficulty": word.difficulty,
+            }
+            for word in words
+        ]
+        return JsonResponse(word_list, safe=False)
+    
+    
+def file_exists(file_path):
+    """Check if a file already exists in the specified path."""
+    return os.path.exists(file_path)
+    
+@csrf_exempt
+def add_word(request):
+    if request.method == 'POST':
+        word = request.POST.get('word')
+        difficulty = request.POST.get('difficulty')
+        image = request.FILES.get('image')
+
+        if not word or not difficulty or not image:
+            return JsonResponse({'status': 'error', 'message': 'All fields are required!'})
+
+     # Use the word as-is for naming the files
+        file_safe_word = word.strip().lower()  # Strip whitespace for safety
+
+        # Check if the image already exists
+        image_name = f'{file_safe_word}'
+
+        # Save the uploaded image to the specified folder
+        fs = FileSystemStorage(location='media/images/')
+        image_name = fs.save(f"{image_name}.jpg", image)
+
+      #  image_name = fs.save(image.name, image)
+
+        # Save the word and image path in the database
+        Word.objects.create(
+            word=word,
+            difficulty=difficulty,
+            image=f'images/{image_name}',
+        )
+
+        return JsonResponse({'status': 'success', 'message': 'Word added successfully!'})
+
+    return JsonResponse({'status': 'error', 'message': 'Invalid request method!'})
 
 
 
+from django.core.files.storage import FileSystemStorage
+from django.http import JsonResponse
+from django.shortcuts import get_object_or_404
+from .models import Word
+import logging
 
-# Preprocess the image for OCR
-def preprocess_image(image):
-    # Convert image to grayscale
-    gray_image = cv2.cvtColor(np.array(image), cv2.COLOR_BGR2GRAY)
 
-    # Apply binary thresholding
-    _, thresh_image = cv2.threshold(gray_image, 150, 255, cv2.THRESH_BINARY)
 
-    # Optional: Apply median blur to remove noise
-    processed_image = cv2.medianBlur(thresh_image, 3)
+@csrf_exempt
+def edit_word(request, word_id=None):
+    """Add or edit a word, checking for existing image/audio."""
+    if request.method == 'POST':
+        # If word_id is provided, we are editing an existing word
+        if word_id:
+            word = get_object_or_404(Word, id=word_id)
+        else:
+            word = Word()  # If no word_id, it's a new word (creating)
 
-    return processed_image
 
-def filter_text(text):
-    filtered_text = []
-    for line in text.splitlines():
-        # Skip lines that look like code comments or contain URLs
-        if not re.match(r'^\s*//.*$', line) and not re.match(r'.*//.*$', line):  # Remove // comments
-            if re.match(r'https?://[^\s]+', line):  # Skip URLs
-                continue
-            filtered_text.append(line)
-    return "\n".join(filtered_text)
+        word_data = request.POST
 
-# Updated text extraction function with filtering
-def extract_text_from_pdf(pdf_path):
-    document = fitz.open(pdf_path)
-    pages_text = []
+        new_word = word_data.get('word', word.word)  # New word text from request
 
-    pytesseract.pytesseract.tesseract_cmd = r'C:\Program Files\Tesseract-OCR\tesseract.exe'
+        # Handle audio deletion if the word changes
+        if new_word != word.word:
+            # Define the old audio file path
+            old_audio_filename = f'{word.word.capitalize()}.mp3'
+            old_audio_path = os.path.join(settings.MEDIA_ROOT, 'audio', old_audio_filename)
+            if os.path.exists(old_audio_path):
+                os.remove(old_audio_path)  # Delete the old audio file
 
-    for page_num in range(len(document)):
-        page = document.load_page(page_num)
 
-        # Extract the page as an image
-        pix = page.get_pixmap()  # Create a pixmap (image) of the page
-        img = Image.open(io.BytesIO(pix.tobytes()))  # Open the image with Pillow
+        word.word = word_data.get('word', word.word)
+        word.difficulty = word_data.get('difficulty', word.difficulty)
 
-        # Preprocess the image before passing to Tesseract
-        processed_img = preprocess_image(img)
+        # Handle image upload
+        if 'image' in request.FILES:
+            image = request.FILES['image']
+            image_path = os.path.join(settings.MEDIA_ROOT, 'images', image.name)
 
-        # Use pytesseract to perform OCR on the processed image and extract text
-        text = pytesseract.image_to_string(processed_img, config='--psm 6')
+            if not file_exists(image_path):
+                fs = FileSystemStorage(location='media/images/')
+                image_name = fs.save(image.name, image)
+                word.image = f'images/{image_name}'  # Save the new image path
+            else:
+                word.image = f'images/{image.name}'  # Use the existing image
 
-        if text.strip():  # Only process non-empty text
-            filtered_text = filter_text(text)  # Filter out unwanted lines
-            pages_text.append(filtered_text)  # Append the filtered text
+        # Check and set the audio file path based on the word
+        audio_filename = f'{word.word.capitalize()}.mp3'  # Capitalize the first letter of the word and add .mp3
+        audio_path = os.path.join(settings.MEDIA_ROOT, 'audio', audio_filename)
 
-    return pages_text
+        if file_exists(audio_path):
+            word.audio = f'audio/{audio_filename}'  # Use the existing audio
+
+        word.save()  # Save the word to the database
+
+        return JsonResponse({
+            "status": "success",
+            "message": "Word added/updated successfully",
+            "word": word.word,
+            "difficulty": word.difficulty,
+            "image": word.image if word.image else "",
+            "audio": word.audio if word.audio else ""
+        })
+    
+    return JsonResponse({"status": "error", "message": "Invalid request method!"})
+
+
+@csrf_exempt
+def delete_word(request, word_id):
+    try:
+        word = get_object_or_404(Word, id=word_id)
+
+        # Delete the image if it exists
+        if word.image:
+            image_path = os.path.join('media', word.image.path)  # Get the full path to the image
+            if os.path.exists(image_path):
+                os.remove(image_path)  # Delete the image from the file system
+
+        # Delete the audio file
+        audio_path = os.path.join('media', 'audio', f"{word.word.capitalize()}.mp3")
+        if os.path.exists(audio_path):
+            os.remove(audio_path)  # Delete the corresponding audio file
+
+        word.delete()  # Delete the word record from the database
+
+        return JsonResponse({
+            "status": "success",
+            "message": "Word and related files deleted successfully"
+        })
+
+    except Exception as e:
+        return JsonResponse({
+            "status": "error",
+            "message": f"An error occurred: {str(e)}"
+        })

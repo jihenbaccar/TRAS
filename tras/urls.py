@@ -35,6 +35,23 @@ urlpatterns = [
     path('story/<int:story_id>/check_answer/', views.check_answer, name='check_answer'),
     path('audio/<str:filename>/', views.serve_audio, name='serve_audio'),  # Servir les fichiers audio
 
+    #Stories management
+    path('manage_stories/', views.manage_stories, name='manage_stories'),
+    path('add-story/', views.add_story, name='add_story'),
+    path('update-story/<int:story_id>/', views.update_story, name='update_story'),
+    path('delete-story/<int:story_id>/', views.delete_story, name='delete_story'),
+
+    # PRONUNCIATION MANAGEMENT
+
+    path('manage_words/', views.manage_words, name='manage_words'),
+    path('words/', views.get_words, name='get_words'),
+    path('words/add/', views.add_word, name='add_word'),
+    path('words/edit/<int:word_id>/', views.edit_word, name='edit_word'),
+    path('words/delete/<int:word_id>/', views.delete_word, name='delete_word'),
+
+   # path('edit/<int:word_id>/', views.edit_word, name='edit_word'),  # Correct path for edit_word view
+
+
 ] + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT) 
 
 
